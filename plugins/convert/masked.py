@@ -154,8 +154,12 @@ class Convert():
         if self.blur_size != 0:
             if self.blur_size < 1.0:
                 mask_radius = numpy.sqrt(numpy.sum(mask)) / 2
-                self.blur_size = max(1,int(self.blur_size * mask_radius))
-            mask = cv2.blur(mask, (int(self.blur_size),int(self.blur_size)))
+                blur = max(1,int(self.blur_size * mask_radius))
+                mask = cv2.blur(mask, blur, blur)
+            else:
+                mask = cv2.blur(mask, (int(self.blur_size),int(self.blur_size)))
+                
+            #mask = fft_convolve2d(self, mask, kernel)
             
         return numpy.clip(mask, 0.0, 1.0, out=mask)
         
@@ -253,3 +257,73 @@ class Convert():
         return flat_new_image.reshape(source.shape) * 255.0
         '''
         return source
+        
+        
+    def fft_convolve2d(self, image, kernel):
+    ''' 2D convolution, using FFT '''
+
+        def pad_to_power(arr, kernel):
+            next_power = NextPowerOfTwo(numpy.max(arr.shape))
+            next_size = numpy.power(2, next_power)
+            y_deficit, x_deficit, _ = next_size - arr.shape
+            a_deficit, b_deficit, _ = next_size - arr.shape
+            image = numpy.pad(arr, ((y_deficit,0),(x_deficit,0)), mode='constant')
+            kernel = numpy.pad(arr, ((a_deficit,0),(b_deficit,0)), mode='constant')
+            
+            return image, kernel
+
+        padded_image, padded_kernel = pad_to_power(image, kernel)
+        fr = numpy.fft.fft2(padded_image)
+        fr2 = numpy.fft.fft2(numpy.flipud(numpy.fliplr(padded_kernel)))
+        m,n = fr.shape
+        cc = numpy.real(numpy.fft.ifft2(fr * fr2))
+        cc = numpy.roll(cc, -m / 2 + 1, axis=0)
+        cc = numpy.roll(cc, -n / 2 + 1, axis=1)
+
+        return cc
+        
+        
+        
+import numpy as np
+def gaussian_kernel_0(size=21, sigma=3.0):
+    X_norm = np.sum(X ** 2, axis = -1)
+    X_norm = np.einsum('ij,ij->i',X,X)
+    K = var * np.exp(-gamma * (X_norm[:,None] + X_norm[None,:] - 2 * np.dot(X, X.T)))
+    return K
+    
+def gaussian_kernel_1(size=21, sigma=3.0):
+    interval = (2*sigma+1.)/(size)
+    x = np.linspace(-sigma-interval/2., sigma+interval/2., size+1)
+    kern1d = np.diff(st.norm.cdf(x))
+    kernel = np.sqrt(np.outer(kern1d, kern1d))
+    return kernel / kernel.sum()
+    
+def gaussian_kernel_2(size=21, sigma=3.0):
+    x = np.linspace(- (size // 2), size // 2)
+    x2 = ( x / np.sqrt(2)*sigma ) **2
+    kernel = np.exp(- x2[:, None] - x2[None, :])
+    return kernel / kernel.sum() 
+
+def gaussian_kernel_3(size=21, sigma=3.0):
+    ax = np.arange(-size // 2 + 1., size // 2 + 1.)
+    xx, yy = np.meshgrid(ax, ax)
+    kernel = np.exp(-(xx**2 + yy**2) / (2. * sigma**2))
+    return kernel / np.sum(kernel)
+
+def gaussian_kernel_4(shape=(21,21),sigma=3.0):
+    m,n = [(ss-1.)/2. for ss in shape]
+    y,x = np.ogrid[-m:m+1,-n:n+1]
+    h = np.exp( -(x*x + y*y) / (2.*sigma*sigma) )
+    h[ h < np.finfo(h.dtype).eps*h.max() ] = 0
+    sumh = h.sum()
+    if sumh != 0:
+        h /= sumh
+    return h
+    
+x = gaussian_kernel_1()
+y = gaussian_kernel_2()
+z = gaussian_kernel_3()
+a = gaussian_kernel_4()
+    
+
+    
