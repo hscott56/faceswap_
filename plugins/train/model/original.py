@@ -44,12 +44,12 @@ class Model(ModelBase):
             output = decoder(self.networks["encoder"].network(inp))
             autoencoder = KerasModel(inp, output)
             self.add_predictor(side, autoencoder)
+            
         logger.debug("Initialized model")
 
     def encoder(self):
         """ Encoder Network """
         input_ = Input(shape=self.input_shape)
-        use_subpixel = self.config["subpixel_upscaling"]
         latent_shape = self.input_shape[0] // 16
         
         sizes = [self.encoder_dim // 8,
@@ -71,19 +71,20 @@ class Model(ModelBase):
         var_x = Dense(latent_shape * latent_shape * self.encoder_dim, name = '2nd_dense')(var_x)
         var_x = Reshape((latent_shape, latent_shape, self.encoder_dim))(var_x)
         
-        var_x = upscale(var_x, self.encoder_dim // 2, use_subpixel=use_subpixel, name = '1st_upscale')
+        var_x = upscale(var_x, self.encoder_dim // 2, use_subpixel=self.config["subpixel_upscaling"], name = '1st_upscale')
         return KerasModel(input_, var_x)
 
     def decoder(self):
         """ Decoder Network """
+        input_ = Input(shape=(self.input_shape[0] // 8, self.input_shape[0] // 8, self.encoder_dim // 2))
+        
         sizes = [self.encoder_dim // 4,
                  self.encoder_dim // 8,
                  self.encoder_dim // 16]
         names = ['2nd_upscale',
                  '3rd_upscale',
                  '4th_upscale']
-        
-        input_ = Input(shape=(self.input_shape[0] // 8, self.input_shape[0] // 8, self.encoder_dim // 2))         
+                 
         var_x = input_
         for size, name in zip(sizes,names):
             var_x = upscale(var_x, size , use_subpixel=self.config["subpixel_upscaling"], name = name)
