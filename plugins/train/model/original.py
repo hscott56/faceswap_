@@ -44,7 +44,6 @@ class Model(ModelBase):
             output = decoder(self.networks["encoder"].network(inp))
             autoencoder = KerasModel(inp, output)
             self.add_predictor(side, autoencoder)
-            
         logger.debug("Initialized model")
 
     def encoder(self):
