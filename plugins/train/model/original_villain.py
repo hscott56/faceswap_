@@ -23,12 +23,7 @@ class Model(OriginalModel):
 
         super().__init__(*args, **kwargs)
         logger.debug("Initialized %s", self.__class__.__name__)
-
-    def set_training_data(self):
-        """ Set the dictionary for training """
-        self.training_opts["preview_images"] = 10
-        super().set_training_data()
-
+        
     def encoder(self):
         """ Encoder Network """
         kwargs = {"kernel_initializer": self.kernel_initializer}
@@ -42,8 +37,8 @@ class Model(OriginalModel):
         tmp_x = var_x
         res_cycles = 8 if self.config.get("lowmem", False) else 16
         for _ in range(res_cycles):
-            nn_x = res_block(var_x, self.encoder_dim // 8, **kwargs)
-            var_x = nn_x
+            var_x = res_block(var_x, self.encoder_dim // 8, **kwargs)
+            
         var_x = add([var_x, tmp_x])
         var_x = conv(var_x, self.encoder_dim // 8, **kwargs)
         var_x = PixelShuffler()(var_x)
@@ -54,8 +49,9 @@ class Model(OriginalModel):
         var_x = conv(var_x, self.encoder_dim // 2, **kwargs)
         if not self.config.get("lowmem", False):
             var_x = conv_sep(var_x, self.encoder_dim, **kwargs)
-
-        var_x = Dense(self.encoder_dim, **kwargs)(Flatten()(var_x))
+        
+        var_x = Flatten()(var_x)
+        var_x = Dense(self.encoder_dim, **kwargs)(var_x)
         var_x = Dense(latent_shape * latent_shape * self.encoder_dim, **kwargs)(var_x)
         var_x = Reshape((latent_shape, latent_shape, self.encoder_dim))(var_x)
         var_x = upscale(var_x, self.encoder_dim // 2, **kwargs)
