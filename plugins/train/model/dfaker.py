@@ -28,6 +28,7 @@ class Model(OriginalModel):
         self.training_opts["serializer"] = self.config["alignments_format"]
         self.training_opts["mask_type"] = self.config["mask_type"]
         self.training_opts["full_face"] = True
+        self.training_opts["preview_images"] = 10
         super().set_training_data()
 
     def build_autoencoders(self):
@@ -45,31 +46,34 @@ class Model(OriginalModel):
 
     def decoder(self):
         """ Decoder Network """
-        input_ = Input(shape=(8, 8, 512))
         use_subpixel = self.config["subpixel_upscaling"]
+        latent_shape = self.input_shape[0] // 16
+        input_ = Input(shape=(latent_shape*2, latent_shape*2, self.encoder_dim // 2))
 
         inp_x = input_
         inp_y = input_
 
-        inp_x = upscale(inp_x, 512, use_subpixel=use_subpixel)
-        inp_x = res_block(inp_x, 512, kernel_initializer=self.kernel_initializer)
-        inp_x = upscale(inp_x, 256, use_subpixel=use_subpixel)
-        inp_x = res_block(inp_x, 256, kernel_initializer=self.kernel_initializer)
-        inp_x = upscale(inp_x, 128, use_subpixel=use_subpixel)
-        inp_x = res_block(inp_x, 128, kernel_initializer=self.kernel_initializer)
-        inp_x = upscale(inp_x, 64, use_subpixel=use_subpixel)
+        inp_x = upscale(inp_x, self.encoder_dim // 2, use_subpixel=use_subpixel, name = '2nd_upscale')
+        inp_x = res_block(inp_x, self.encoder_dim // 2, kernel_initializer=self.kernel_initializer)
+        inp_x = upscale(inp_x, self.encoder_dim // 4, use_subpixel=use_subpixel, name = '3rd_upscale')
+        inp_x = res_block(inp_x, self.encoder_dim // 4, kernel_initializer=self.kernel_initializer)
+        inp_x = upscale(inp_x, self.encoder_dim // 8, use_subpixel=use_subpixel, name = '4th_upscale')
+        inp_x = res_block(inp_x, self.encoder_dim // 8, kernel_initializer=self.kernel_initializer)
+        inp_x = upscale(inp_x, self.encoder_dim // 16, use_subpixel=use_subpixel, name = '5th_upscale')
         inp_x = Conv2D(3,
                        kernel_size=5,
                        padding='same',
-                       activation='sigmoid')(inp_x)
+                       activation='sigmoid',
+                       name = 'output_sigmoid')(inp_x)
 
-        inp_y = upscale(inp_y, 512, use_subpixel=use_subpixel)
-        inp_y = upscale(inp_y, 256, use_subpixel=use_subpixel)
-        inp_y = upscale(inp_y, 128, use_subpixel=use_subpixel)
-        inp_y = upscale(inp_y, 64, use_subpixel=use_subpixel)
+        inp_y = upscale(inp_y, self.encoder_dim // 2 , use_subpixel=use_subpixel, name = '2nd_m_upscale')
+        inp_y = upscale(inp_y, self.encoder_dim // 4 , use_subpixel=use_subpixel, name = '3rd_m_upscale')
+        inp_y = upscale(inp_y, self.encoder_dim // 8 , use_subpixel=use_subpixel, name = '4th_m_upscale')
+        inp_y = upscale(inp_y, self.encoder_dim // 16, use_subpixel=use_subpixel, name = '5th_m_upscale')
         inp_y = Conv2D(1,
                        kernel_size=5,
                        padding='same',
-                       activation='sigmoid')(inp_y)
+                       activation='sigmoid',
+                       name = 'mask_sigmoid')(inp_y)
 
         return KerasModel([input_], outputs=[inp_x, inp_y])

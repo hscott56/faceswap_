@@ -26,6 +26,7 @@ class Model(OriginalModel):
     def set_training_data(self):
         """ Set the dictionary for training """
         self.training_opts["mask_type"] = self.config["mask_type"]
+        self.training_opts["preview_images"] = 10
         super().set_training_data()
 
     def build_autoencoders(self):
@@ -45,30 +46,39 @@ class Model(OriginalModel):
         """ DFL H128 Encoder """
         input_ = Input(shape=self.input_shape)
         use_subpixel = self.config["subpixel_upscaling"]
+        latent_shape = self.input_shape[0] // 16
 
         var_x = input_
-        var_x = conv(var_x, 128)
-        var_x = conv(var_x, 256)
-        var_x = conv(var_x, 512)
-        var_x = conv(var_x, 1024)
-        var_x = Dense(self.encoder_dim)(Flatten()(var_x))
-        var_x = Dense(8 * 8 * self.encoder_dim)(var_x)
-        var_x = Reshape((8, 8, self.encoder_dim))(var_x)
-        var_x = upscale(var_x, self.encoder_dim, use_subpixel=use_subpixel)
+        var_x = conv(var_x, self.encoder_dim // 8, name='1st_conv')
+        var_x = conv(var_x, self.encoder_dim // 4, name='2nd_conv')
+        var_x = conv(var_x, self.encoder_dim // 2, name='3rd_conv')
+        var_x = conv(var_x, self.encoder_dim, name='4th_conv')
+        var_x = Flatten()(var_x)
+        var_x = Dense(self.encoder_dim, name = '1st_dense')(var_x)
+        var_x = Dense(latent_shape * latent_shape * self.encoder_dim, name = '2nd_dense')(var_x)
+        var_x = Reshape((latent_shape, latent_shape, self.encoder_dim))(var_x)
+        var_x = upscale(var_x, self.encoder_dim, use_subpixel=use_subpixel, name = '1st_upscale')
         return KerasModel(input_, var_x)
 
     def decoder(self):
         """ DFL H128 Decoder """
-        input_ = Input(shape=(16, 16, self.encoder_dim))
         use_subpixel = self.config["subpixel_upscaling"]
+        latent_shape = self.input_shape[0] // 16
+        input_ = Input(shape=(latent_shape, latent_shape, self.encoder_dim))
 
         var = input_
-        var = upscale(var, self.encoder_dim, use_subpixel=use_subpixel)
-        var = upscale(var, self.encoder_dim // 2, use_subpixel=use_subpixel)
-        var = upscale(var, self.encoder_dim // 4, use_subpixel=use_subpixel)
+        var = upscale(var, self.encoder_dim, use_subpixel=use_subpixel, name = '2nd_upscale')
+        var = upscale(var, self.encoder_dim // 2, use_subpixel=use_subpixel, name = '3rd_upscale')
+        var = upscale(var, self.encoder_dim // 4, use_subpixel=use_subpixel, name = '4th_upscale')
 
         # Face
-        var_x = Conv2D(3, kernel_size=5, padding="same", activation="sigmoid")(var)
+        var_x = Conv2D(3, kernel_size=5,
+                          padding='same',
+                          activation='sigmoid',
+                          name = 'output_sigmoid')(var)
         # Mask
-        var_y = Conv2D(1, kernel_size=5, padding="same", activation="sigmoid")(var)
+        var_y = Conv2D(1, kernel_size=5,
+                          padding="same",
+                          activation="sigmoid",
+                          name = 'mask_sigmoid')(var)
         return KerasModel(input_, [var_x, var_y])

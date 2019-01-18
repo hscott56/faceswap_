@@ -50,27 +50,30 @@ class Model(ModelBase):
         """ Encoder Network """
         input_ = Input(shape=self.input_shape)
         use_subpixel = self.config["subpixel_upscaling"]
+        latent_shape = self.input_shape[0] // 16
 
         var_x = input_
-        var_x = conv(var_x, 128)
-        var_x = conv(var_x, 256)
-        var_x = conv(var_x, 512)
+        var_x = conv(var_x, self.encoder_dim // 8, name='1st_conv')
+        var_x = conv(var_x, self.encoder_dim // 4 , name='2nd_conv')
+        var_x = conv(var_x, self.encoder_dim // 2 , name='3rd_conv')
         if not self.config.get("lowmem", False):
-            var_x = conv(var_x, 1024)
-        var_x = Dense(self.encoder_dim)(Flatten()(var_x))
-        var_x = Dense(4 * 4 * 1024)(var_x)
-        var_x = Reshape((4, 4, 1024))(var_x)
-        var_x = upscale(var_x, 512, use_subpixel=use_subpixel)
+            var_x = conv(var_x, self.encoder_dim , name = '4th_conv')
+        var_x = Flatten()(var_x)
+        var_x = Dense(self.encoder_dim, name = '1st_dense')(var_x)
+        var_x = Dense(latent_shape * latent_shape * self.encoder_dim, name = '2nd_dense')(var_x)
+        var_x = Reshape((latent_shape, latent_shape, self.encoder_dim))(var_x)
+        var_x = upscale(var_x, self.encoder_dim // 2, use_subpixel=use_subpixel, name = '1st_upscale')
         return KerasModel(input_, var_x)
 
     def decoder(self):
         """ Decoder Network """
-        input_ = Input(shape=(8, 8, 512))
         use_subpixel = self.config["subpixel_upscaling"]
+        latent_shape = self.input_shape[0] // 16
+        input_ = Input(shape=(latent_shape*2, latent_shape*2, self.encoder_dim // 2))
 
         var_x = input_
-        var_x = upscale(var_x, 256, use_subpixel=use_subpixel)
-        var_x = upscale(var_x, 128, use_subpixel=use_subpixel)
-        var_x = upscale(var_x, 64, use_subpixel=use_subpixel)
-        var_x = Conv2D(3, kernel_size=5, padding="same", activation="sigmoid")(var_x)
+        var_x = upscale(var_x, self.encoder_dim // 4 , use_subpixel=use_subpixel, name = '2nd_upscale')
+        var_x = upscale(var_x, self.encoder_dim // 8 , use_subpixel=use_subpixel, name = '3rd_upscale')
+        var_x = upscale(var_x, self.encoder_dim // 16, use_subpixel=use_subpixel, name = '4th_upscale')
+        var_x = Conv2D(3, kernel_size=5, padding="same", activation="sigmoid", name = 'output_sigmoid')(var_x)
         return KerasModel(input_, var_x)
