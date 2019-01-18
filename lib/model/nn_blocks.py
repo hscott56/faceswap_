@@ -20,7 +20,7 @@ from .normalization import GroupNormalization, InstanceNormalization
 
 # <<< Original Model Blocks >>> #
 
-def conv(inp, filters, kernel_size=5, strides=2, use_instance_norm=False, **kwargs):
+def conv(inp, filters, kernel_size=5, strides=2, use_instance_norm=False, spatial_dropout=0.0, **kwargs):
     """ Convolution Layer"""
     var_x = Conv2D(filters,
                    kernel_size=kernel_size,
@@ -30,6 +30,8 @@ def conv(inp, filters, kernel_size=5, strides=2, use_instance_norm=False, **kwar
     if use_instance_norm:
         var_x = InstanceNormalization()(var_x)
     var_x = LeakyReLU(0.1)(var_x)
+    if spatial_dropout != 0.0:
+        var_x = SpatialDropout2D(spatial_dropout)(var_x)
     return var_x
 
 
