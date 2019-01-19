@@ -46,33 +46,41 @@ class Model(OriginalModel):
     def decoder(self):
         """ Decoder Network """
         use_subpixel = self.config["subpixel_upscaling"]
-        latent_shape = self.input_shape[0] // 16
-        input_ = Input(shape=(latent_shape*2, latent_shape*2, self.encoder_dim // 2))
-
-        inp_x = input_
-        inp_y = input_
-
-        inp_x = upscale(inp_x, self.encoder_dim // 2, use_subpixel=use_subpixel, name = '2nd_upscale')
-        inp_x = res_block(inp_x, self.encoder_dim // 2, kernel_initializer=self.kernel_initializer)
-        inp_x = upscale(inp_x, self.encoder_dim // 4, use_subpixel=use_subpixel, name = '3rd_upscale')
-        inp_x = res_block(inp_x, self.encoder_dim // 4, kernel_initializer=self.kernel_initializer)
-        inp_x = upscale(inp_x, self.encoder_dim // 8, use_subpixel=use_subpixel, name = '4th_upscale')
-        inp_x = res_block(inp_x, self.encoder_dim // 8, kernel_initializer=self.kernel_initializer)
-        inp_x = upscale(inp_x, self.encoder_dim // 16, use_subpixel=use_subpixel, name = '5th_upscale')
-        inp_x = Conv2D(3,
+        input_ = Input(shape=(self.input_shape[0] // 8, self.input_shape[0] // 8, self.encoder_dim // 2))
+        
+        sizes = [self.encoder_dim // 2,
+                 self.encoder_dim // 4,
+                 self.encoder_dim // 8,
+                 self.encoder_dim // 16]
+        names = [
+                 '2nd_upscale',
+                 '3rd_upscale',
+                 '4th_upscale',
+                 '5th_upscale']
+        m_names = ['2nd_m_upscale',
+                   '3rd_m_upscale',
+                   '4th_m_upscale',
+                   '5th_m_upscale']
+                 
+        var_x = input_
+        var_y = input_
+        # adds one more resblock iteration than standard dfaker
+        for size, name in zip(sizes,names):
+            var_x = upscale(var_x, size , use_subpixel=self.config["subpixel_upscaling"], name = name)
+            var_x = res_block(var_x, size, kernel_initializer=self.kernel_initializer)
+            
+        for size, name in zip(sizes,names):
+            var_y = upscale(var_y, size , use_subpixel=self.config["subpixel_upscaling"], name = name)
+            
+        var_x = Conv2D(3,
                        kernel_size=5,
                        padding='same',
                        activation='sigmoid',
-                       name = 'output_sigmoid')(inp_x)
-
-        inp_y = upscale(inp_y, self.encoder_dim // 2 , use_subpixel=use_subpixel, name = '2nd_m_upscale')
-        inp_y = upscale(inp_y, self.encoder_dim // 4 , use_subpixel=use_subpixel, name = '3rd_m_upscale')
-        inp_y = upscale(inp_y, self.encoder_dim // 8 , use_subpixel=use_subpixel, name = '4th_m_upscale')
-        inp_y = upscale(inp_y, self.encoder_dim // 16, use_subpixel=use_subpixel, name = '5th_m_upscale')
-        inp_y = Conv2D(1,
+                       name = 'output_sigmoid')(var_x)
+        var_y = Conv2D(1,
                        kernel_size=5,
                        padding='same',
                        activation='sigmoid',
-                       name = 'mask_sigmoid')(inp_y)
+                       name = 'mask_sigmoid')(var_y)
 
-        return KerasModel([input_], outputs=[inp_x, inp_y])
+        return KerasModel([input_], outputs=[var_x, var_y])
