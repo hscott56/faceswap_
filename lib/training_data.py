@@ -128,15 +128,15 @@ class TrainingDataGenerator():
                                        coverage=self.processing.get_coverage(image))
 
         image = self.processing.color_adjust(image)
-        image = self.processing.random_transform(image)
+        matrix = self.processing.random_matrix(image)
+        image = self.processing.transform_and_resize(image, mat)
 
         if self.full_face:
             dst_pts = self.get_closest_match(filename, side, landmarks, src_pts)
-            processed = self.processing.random_warp_full_face(image, src_pts, dst_pts)
+            retval = self.processing.random_warp_full_face(image, src_pts, dst_pts)
         else:
-            processed = self.processing.random_warp(image)
+            retval = self.processing.random_warp(image)
 
-        retval = self.processing.do_random_flip(processed)
         logger.trace("Processed face: (filename: '%s', side: '%s', shapes: %s)",
                      filename, side, [img.shape for img in retval])
         return retval
@@ -182,14 +182,19 @@ class ImageManipulation():
         self.rotation_range = 10  # Range to randomly rotate the image by
         self.zoom_range = 0.05  # Range to randomly zoom the image by
         self.shift_range = 0.05  # Range to randomly shift the image by
+        self.transforms = numpy.array([10, 0.05, .05, 0.05, 1.0]
         self.random_flip = 0.49  # Chance to flip the image left > right
         # Transform and Warp args
+        self.input_size = input_size
         self.zoom_source = input_size // 64
         self.zoom_target = output_size // 64
         # Warp args
         self.coverage_ratio = coverage_ratio  # Coverage ratio of full image. Eg: 256 * 0.625 = 160
         self.scale = 5  # Normal random variable scale
         logger.debug("Initialized %s", self.__class__.__name__)
+        
+
+
 
     @staticmethod
     def color_adjust(img):
@@ -212,80 +217,55 @@ class ImageManipulation():
         coverage = int(image.shape[0] * self.coverage_ratio)
         logger.trace(coverage)
         return coverage
-
-    def random_transform(self, image):
-        """ Randomly transform an image """
-        logger.trace("Randomly transforming image")
-        height, width = image.shape[0:2]
-
-        rotation = np.random.uniform(-self.rotation_range, self.rotation_range)
-        scale = np.random.uniform(1 - self.zoom_range, 1 + self.zoom_range)
-        tnx = np.random.uniform(-self.shift_range, self.shift_range) * width
-        tny = np.random.uniform(-self.shift_range, self.shift_range) * height
-
-        mat = cv2.getRotationMatrix2D(  # pylint: disable=no-member
-            (width // 2, height // 2), rotation, scale)
-        mat[:, 2] += (tnx, tny)
-        result = cv2.warpAffine(  # pylint: disable=no-member
-            image, mat, (width, height),
-            borderMode=cv2.BORDER_REPLICATE)  # pylint: disable=no-member
-
-        logger.trace("Randomly transformed image")
-        return result
-
-    def random_warp(self, image, src_points=None, dst_points=None):
-        """ get pair of random warped images from aligned face image """
-        logger.trace("Randomly warping image")
+        
+    def random_matrix(self, image):
+        # [0]=rotation, [1]=scale, [2]=tnx, [3]=tny, [4]=flip
+        logger.trace("Preparing matrix for randomly transformed image")
+        
+        h, w = image.shape[0:2]
+        affine = np.random.uniform(-1.0,1.0,5) * self.transforms
+        mat = cv2.getRotationMatrix2D((w // 2, h // 2), affine[0], affine[1] + 1.0) # pylint: disable=no-member
+        mat[:,2] += (affine[2]*image.shape[1], affine[3]*image.shape[0])
+        if affine[4] >= self.random_flip * 2.0 - 1.0:
+            image = image[:,::-1]
+        logger.trace("Matrix for randomly transformed image prepared")
+        
+        return image, mat
+        
+    def transform_and_resize(self, image, mat):
+        h, w = image.shape[0:2]
         image, mask = self.separate_mask(image)
-        height, width = image.shape[0:2]
-        coverage = self.get_coverage(image)
-        assert height == width and height % 2 == 0
-
-        range_ = np.linspace(height // 2 - coverage // 2,
-                             height // 2 + coverage // 2, self.scale)
-        mapx = np.broadcast_to(range_, (self.scale, self.scale))
-        mapy = mapx.T
-
-        mapx = mapx + np.random.normal(size=(self.scale, self.scale), scale=self.scale)
-        mapy = mapy + np.random.normal(size=(self.scale, self.scale), scale=self.scale)
-
-        interp_mapx = cv2.resize(  # pylint: disable=no-member
-            mapx, (80 * self.zoom_source,
-                   80 * self.zoom_source))[
-                       8 * self.zoom_source:72 * self.zoom_source,
-                       8 * self.zoom_source:72 * self.zoom_source].astype('float32')
-        interp_mapy = cv2.resize(  # pylint: disable=no-member
-            mapy, (80 * self.zoom_source,
-                   80 * self.zoom_source))[
-                       8 * self.zoom_source:72 * self.zoom_source,
-                       8 * self.zoom_source:72 * self.zoom_source].astype('float32')
-
-        warped_image = cv2.remap(  # pylint: disable=no-member
-            image, interp_mapx, interp_mapy, cv2.INTER_LINEAR)  # pylint: disable=no-member
+        warp_input   = cv2.warpAffine(image, mat, (w, h), borderMode=cv2.BORDER_REPLICATE, flags=cv2.INTER_CUBIC) # pylint: disable=no-member
+        logger.trace("Randomly transformed image")
+        
+        padding = (image.shape[0] * (1 - self.coverage_ratio)) // 2
+        cover = (image.shape[0] * self.coverage_ratio) // 2
+        crop = slice(padding, -padding)
+        ground_truth = cv2.resize(warp_input[crop,crop], (cover,cover), cv2.INTER_CUBIC) # pylint: disable=no-member
+        ground_truth = cv2.resize(ground_truth, (self.input_size, self.input_size), cv2.INTER_AREA) # pylint: disable=no-member  # area for 80->64
+        logger.trace("Target image shape: %s", ground_truth.shape)
+        
+        if mask is None:
+        
+            return warp_input, ground_truth
+        else:
+            targ_mask = cv2.resize(mask[crop,crop], (cover,cover), cv2.INTER_AREA) # pylint: disable=no-member
+            targ_mask = cv2.resize(targ_mask, (self.input_size, self.input_size), cv2.INTER_AREA) # pylint: disable=no-member  # area for 80->64
+            logger.trace("Target mask shape: %s", tar_mask.shape)
+            
+            return warp_input, ground_truth, targ_mask
+            
+    def random_warp(self, warp_input, target_image):
+        large_random_grid = numpy.empty((2, self.input_size, self.input_size), dtype=numpy.float32)
+        for i, mapping in enumerate([self.mapx, self.mapy]):
+            small_random_grid = numpy.random.normal(size=(5,5), scale=self.scale).astype('float32')
+            large_random_grid[i] = cv2.remap(small_random_grid, self.grid_x, self.grid_y, cv2.INTER_LINEAR) + mapping # pylint: disable=no-member
+            
+        warped_image = cv2.remap(warp_input, large_random_grid[0], large_random_grid[1], cv2.INTER_LINEAR) # pylint: disable=no-member
         logger.trace("Warped image shape: %s", warped_image.shape)
-
-        src_points = np.stack([mapx.ravel(), mapy.ravel()], axis=-1)
-        dst_points = np.mgrid[0:65 * self.zoom_source:16 * self.zoom_source,
-                              0:65 * self.zoom_source:16 * self.zoom_source].T.reshape(-1, 2)
-
-        mat = umeyama(src_points, True, dst_points)[0:2]
-        target_image = cv2.warpAffine(  # pylint: disable=no-member
-            image, mat, (64 * self.zoom_target, 64 * self.zoom_target))
-        logger.trace("Target image shape: %s", target_image.shape)
-
-        retval = [warped_image, target_image]
-
-        if mask is not None:
-            target_mask = cv2.warpAffine(  # pylint: disable=no-member
-                mask, mat, (64 * self.zoom_target, 64 * self.zoom_target))
-            target_mask = target_mask.reshape((64 * self.zoom_target, 64 * self.zoom_target, 1))
-            logger.trace("Target mask shape: %s", target_mask.shape)
-
-            retval.append(target_mask)
-
-        logger.trace("Randomly warped image")
-        return retval
-
+        
+        return warped_image, target_image
+        
     def random_warp_full_face(self, image, src_points=None, dst_points=None):
         """ get warped image, target image and target mask
             From DFAKER plugin """
@@ -369,18 +349,6 @@ class ImageManipulation():
         logger.trace("Randomly warped image")
         return retval
 
-    def do_random_flip(self, images):
-        """ Perform flip on images if random number is within threshold """
-        logger.trace("Randomly flipping image")
-        if np.random.random() < self.random_flip:
-            logger.trace("Flip within threshold. Flipping")
-            retval = [image[:, ::-1] for image in images]
-        else:
-            logger.trace("Flip outside threshold. Not Flipping")
-            retval = images
-        logger.trace("Randomly flipped image")
-        return retval
-
 
 def stack_images(images):
     """ Stack images """
@@ -405,3 +373,18 @@ def stack_images(images):
         images,
         axes=np.concatenate(new_axes)
         ).reshape(new_shape)
+
+'''
+def stack_images(images):
+    """ Stack images """
+    logger.debug("Stacking images")
+    
+    images_shape = np.array(images.shape)
+    n = len(images_shape)
+    order = [1, 0] if (n % 2 == 0) else [0, 1]
+    new_axes = list(range(order[0], n - 1, 2)), list(range(order[1], n - 1, 2)), [n - 1]
+    new_shape = [np.prod(images_shape[x]) for x in new_axes]
+    logger.debug("Stacked images")
+    
+    return np.transpose(images,axes=np.concatenate(new_axes)).reshape(new_shape)
+'''

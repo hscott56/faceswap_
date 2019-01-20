@@ -51,15 +51,13 @@ class Model(ModelBase):
         input_ = Input(shape=self.input_shape)
         latent_shape = self.input_shape[0] // 16
         
-        sizes = [self.encoder_dim // 8,
-                 self.encoder_dim // 4,
-                 self.encoder_dim // 2]
-        names = ['1st_conv',
-                 '2nd_conv',
-                 '3rd_conv']
+        sizes = [self.encoder_dim // 8, self.encoder_dim // 4,
+                 self.encoder_dim // 2, self.encoder_dim]
+        names = ['1st_conv', '2nd_conv', '3rd_conv','4th_conv']
+        
         if not self.config.get("lowmem", False):
-            sizes.append(self.encoder_dim)
-            names.append('4th_conv')
+            sizes = sizes[:-1]
+            names = names[:-1]
             
         var_x = input_
         for size, name in zip(sizes,names):
@@ -75,14 +73,12 @@ class Model(ModelBase):
 
     def decoder(self):
         """ Decoder Network """
-        input_ = Input(shape=(self.input_shape[0] // 8, self.input_shape[0] // 8, self.encoder_dim // 2))
+        input_ = Input(shape=(self.input_shape[0] // 8,
+                              self.input_shape[0] // 8,
+                              self.encoder_dim // 2))
         
-        sizes = [self.encoder_dim // 4,
-                 self.encoder_dim // 8,
-                 self.encoder_dim // 16]
-        names = ['2nd_upscale',
-                 '3rd_upscale',
-                 '4th_upscale']
+        sizes = [self.encoder_dim // 4, self.encoder_dim // 8, self.encoder_dim // 16]
+        names = ['2nd_upscale', '3rd_upscale', '4th_upscale']
                  
         var_x = input_
         for size, name in zip(sizes,names):

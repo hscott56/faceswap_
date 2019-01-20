@@ -35,52 +35,41 @@ class Model(OriginalModel):
         logger.debug("Initializing model")
         mask_shape = (self.input_shape[0] * 2, self.input_shape[1] * 2, 1)
         for side in ("a", "b"):
-            inp = [Input(shape=self.input_shape, name="face"),
-                   Input(shape=mask_shape, name="mask")]
+            face_in = Input(shape=self.input_shape, name="face")
+            mask_in = Input(shape=mask_shape, name="mask")
             decoder = self.networks["decoder_{}".format(side)].network
-            output = decoder(self.networks["encoder"].network(inp[0]))
-            autoencoder = KerasModel(inp, output)
+            face_out = decoder(self.networks["encoder"].network(inp[0]), mask=False)
+            mask_out = decoder(self.networks["encoder"].network(inp[0]), mask=True)
+            autoencoder = KerasModel([face_in, mask_in], [face_out, mask_out])
             self.add_predictor(side, autoencoder)
         logger.debug("Initialized model")
 
-    def decoder(self):
-        """ Decoder Network """
+    def decoder(self, mask=False):
+        """ DFaker Decoder Network """
         use_subpixel = self.config["subpixel_upscaling"]
-        input_ = Input(shape=(self.input_shape[0] // 8, self.input_shape[0] // 8, self.encoder_dim // 2))
+        input_ = Input(shape=(self.input_shape[0] // 8,
+                              self.input_shape[0] // 8,
+                              self.encoder_dim // 2))
         
-        sizes = [self.encoder_dim // 2,
-                 self.encoder_dim // 4,
-                 self.encoder_dim // 8,
-                 self.encoder_dim // 16]
-        names = [
-                 '2nd_upscale',
-                 '3rd_upscale',
-                 '4th_upscale',
-                 '5th_upscale']
-        m_names = ['2nd_m_upscale',
-                   '3rd_m_upscale',
-                   '4th_m_upscale',
-                   '5th_m_upscale']
-                 
+        sizes = [self.encoder_dim // 2, self.encoder_dim // 4,
+                 self.encoder_dim // 8, self.encoder_dim // 16]
+        names = ['2nd_upscale', '3rd_upscale',
+                 '4th_upscale', '5th_upscale']
+        names = [name + '_mask' for name in names] if mask else names
+        channel_num = 1 if mask else 3
+        out_name = 'face_sigmoid' if mask else 'mask_sigmoid'
+        
         var_x = input_
-        var_y = input_
         # adds one more resblock iteration than standard dfaker
         for size, name in zip(sizes,names):
-            var_x = upscale(var_x, size , use_subpixel=self.config["subpixel_upscaling"], name = name)
-            var_x = res_block(var_x, size, kernel_initializer=self.kernel_initializer)
+            var_x = upscale(var_x, size ,
+                            use_subpixel=self.config["subpixel_upscaling"],
+                            name = name)
+            if not mask:
+                var_x = res_block(var_x, size,
+                                  kernel_initializer=self.kernel_initializer)
             
-        for size, name in zip(sizes,names):
-            var_y = upscale(var_y, size , use_subpixel=self.config["subpixel_upscaling"], name = name)
-            
-        var_x = Conv2D(3,
-                       kernel_size=5,
-                       padding='same',
-                       activation='sigmoid',
-                       name = 'output_sigmoid')(var_x)
-        var_y = Conv2D(1,
-                       kernel_size=5,
-                       padding='same',
-                       activation='sigmoid',
-                       name = 'mask_sigmoid')(var_y)
+        var_x = Conv2D(channel_num, kernel_size=5, padding='same',
+                       activation='sigmoid', name = out_name)(var_x)
 
-        return KerasModel([input_], outputs=[var_x, var_y])
+        return KerasModel(input_, var_x)
