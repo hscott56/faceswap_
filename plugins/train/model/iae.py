@@ -70,7 +70,9 @@ class Model(ModelBase):
 
     def decoder(self):
         """ Decoder Network """
-        input_ = Input(shape=(self.input_shape[0] // 16, self.input_shape[0] // 16, self.encoder_dim))
+        input_ = Input(shape=(self.input_shape[0] // 16,
+                              self.input_shape[0] // 16,
+                              self.encoder_dim))
         sizes = [self.encoder_dim // 2, self.encoder_dim // 4,
                  self.encoder_dim // 8, self.encoder_dim // 16]
         names = ['1st_upscale', '2nd_upscale',
