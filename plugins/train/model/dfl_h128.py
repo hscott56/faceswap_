@@ -59,7 +59,7 @@ class Model(OriginalModel):
         x = Reshape((latent_shape, latent_shape, self.encoder_dim))(x)
 
         x = self.blocks.upscale(x, self.encoder_dim, name = '1st_upscale')
-        return KerasModel(input_, var_x)
+        return KerasModel(input_, x)
 
     def decoder(self, mask=False):
         """ DFL H128 Decoder """
