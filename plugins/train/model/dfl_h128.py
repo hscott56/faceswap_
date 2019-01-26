@@ -34,8 +34,10 @@ class Model(OriginalModel):
             face_in = Input(shape=self.input_shape, name="face")
             mask_in = Input(shape=mask_shape, name="mask")
             decoder = self.networks["decoder_{}".format(side)].network
-            face_out = decoder(self.networks["encoder"].network(face_in), mask=False)
-            mask_out = decoder(self.networks["encoder"].network(face_in), mask=True)
+            decoder.mask = False
+            face_out = decoder(self.networks["encoder"].network(face_in))
+            decoder.mask = True
+            mask_out = decoder(self.networks["encoder"].network(face_in))
             autoencoder = KerasModel([face_in, mask_in], [face_out, mask_out])
             self.add_predictor(side, autoencoder)
         logger.debug("Initialized model")
@@ -61,13 +63,13 @@ class Model(OriginalModel):
         x = self.blocks.upscale(x, self.encoder_dim, name = '1st_upscale')
         return KerasModel(input_, x)
 
-    def decoder(self, mask=False):
+    def decoder(self):
         """ DFL H128 Decoder """
         latent_shape = self.input_shape[0] // 16
         input_ = Input(shape=(latent_shape, latent_shape, self.encoder_dim))
         sizes = [self.encoder_dim, self.encoder_dim // 2, self.encoder_dim // 4]
         names = ['2nd_upscale', '3rd_upscale', '4th_upscale']
-        if mask:
+        if self.mask:
            names = [name + '_mask' for name in names]
            channel_num = 1
            out_name = 'mask_sigmoid'

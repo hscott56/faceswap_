@@ -39,6 +39,7 @@ class ModelBase():
         self.input_shape = input_shape
         self.output_shape = None  # set after model is compiled
         self.encoder_dim = encoder_dim
+        self.mask = False
         self.trainer = trainer
         self.name = self.set_model_name()
 

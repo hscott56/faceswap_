@@ -36,8 +36,8 @@ class Model(OriginalModel):
             face_in = Input(shape=self.input_shape, name="face")
             mask_in = Input(shape=mask_shape, name="mask")
             decoder = self.networks["decoder_{}".format(side)].network
-            face_out = decoder(self.networks["encoder"].network(face_in), mask=False)
-            mask_out = decoder(self.networks["encoder"].network(face_in), mask=True)
+            face_out = decoder(self.networks["encoder"].network(face_in))
+            mask_out = decoder(self.networks["encoder"].network(face_in))
             autoencoder = KerasModel([face_in, mask_in], [face_out, mask_out])
             self.add_predictor(side, autoencoder)
         logger.debug("Initialized model")
