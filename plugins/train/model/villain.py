@@ -28,46 +28,49 @@ class Model(OriginalModel):
         """ Encoder Network """
         kwargs = {"kernel_initializer": self.kernel_initializer}
         input_ = Input(shape=self.input_shape)
-        in_conv_filters = self.input_shape[0]
-        if self.input_shape[0] > 128:
-            in_conv_filters = 128 + (self.input_shape[0] - 128) // 4
+        in_conv_filters = self.input_shape[0] + max(0,self.input_shape[0] - 128) // 4
         latent_shape = self.input_shape[0] // 16
-
-        var_x = self.blocks.conv(input_, in_conv_filters, res_block_follows=True, **kwargs)
-        tmp_x = var_x
         res_cycles = 8 if self.config.get("lowmem", False) else 16
+
+        x = self.blocks.conv(input_, in_conv_filters, res_block_follows=True, **kwargs)
+        shortcut = x
         for _ in range(res_cycles):
-            nn_x = self.blocks.res_block(var_x, 128, **kwargs)
-            var_x = nn_x
-        var_x = add([var_x, tmp_x]) # consider adding scale before this layer to scale the residual chain
-        var_x = self.blocks.conv(var_x, 128, **kwargs)
-        var_x = PixelShuffler()(var_x)
-        var_x = self.blocks.conv(var_x, 128, **kwargs)
-        var_x = PixelShuffler()(var_x)
-        var_x = self.blocks.conv(var_x, 128, **kwargs)
-        var_x = self.blocks.conv_sep(var_x, 256, **kwargs)
-        var_x = self.blocks.conv(var_x, 512, **kwargs)
+            x = self.blocks.res_block(x, 128, **kwargs)
+            
+        x = add([x, shortcut]) # consider adding scale before this layer to scale the residual chain
+        x = self.blocks.conv(x, 128, **kwargs)
+        x = PixelShuffler()(x)
+        x = self.blocks.conv(x, 128, **kwargs)
+        x = PixelShuffler()(x)
+        x = self.blocks.conv(x, 128, **kwargs)
+        x = self.blocks.conv_sep(x, 256, **kwargs)
+        x = self.blocks.conv(x, 512, **kwargs)
         if not self.config.get("lowmem", False):
-            var_x = self.blocks.conv_sep(var_x, 1024, **kwargs)
-
-        var_x = Dense(self.encoder_dim, **kwargs)(Flatten()(var_x))
-        var_x = Dense(dense_shape * dense_shape * 1024, **kwargs)(var_x)
-        var_x = Reshape((dense_shape, dense_shape, 1024))(var_x)
-        var_x = self.blocks.upscale(var_x, 512, **kwargs)
-        return KerasModel(input_, var_x)
-
+            x = self.blocks.conv_sep(x, 1024, **kwargs)
+            
+        x = Flatten()(x)
+        x = Dense(self.encoder_dim, name = '1st_dense', **kwargs)(x)
+        x = Dense(latent_shape * latent_shape * self.encoder_dim, name = '2nd_dense', **kwargs)(x)
+        x = Reshape((latent_shape, latent_shape, self.encoder_dim))(x)
+        
+        x = self.blocks.upscale(x, self.encoder_dim // 2, name = '1st_upscale', **kwargs)
+        
+        return KerasModel(input_, x)
+        
     def decoder(self):
         """ Decoder Network """
         latent_shape = self.input_shape[0] // 16
         kwargs = {"kernel_initializer": self.kernel_initializer}
         input_ = Input(shape=(latent_shape*2, latent_shape*2, self.encoder_dim // 2))
-
-        var_x = input_
-        var_x = self.blocks.upscale(var_x, 512, res_block_follows=True, **kwargs)
-        var_x = self.blocks.res_block(var_x, 512, **kwargs)
-        var_x = self.blocks.upscale(var_x, 256, res_block_follows=True, **kwargs)
-        var_x = self.blocks.res_block(var_x, 256, **kwargs)
-        var_x = self.blocks.upscale(var_x, self.input_shape[0], res_block_follows=True, **kwargs)
-        var_x = self.blocks.res_block(var_x, self.input_shape[0], **kwargs)
-        var_x = Conv2D(3, kernel_size=5, padding='same', activation='sigmoid')(var_x)
-        return KerasModel(input_, var_x)
+        sizes = [self.encoder_dim // 2, self.encoder_dim // 4, self.encoder_dim // 8]
+        names = ['2nd_upscale', '3rd_upscale', '4th_upscale']
+        
+        x = input_
+        for size, name in zip(sizes,names):
+            x = self.blocks.upscale(x, size, res_block_follows=True, name = name, **kwargs)
+            x = self.blocks.res_block(x, size, **kwargs)
+            
+        x = Conv2D(3, kernel_size=5, padding='same',
+                   activation='sigmoid', name = 'output_sigmoid')(x)
+                   
+        return KerasModel(input_, x)
