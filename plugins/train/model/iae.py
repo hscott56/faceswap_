@@ -47,66 +47,39 @@ class Model(ModelBase):
     def encoder(self):
         """ Encoder Network """
         input_ = Input(shape=self.input_shape)
-        var_x = input_
-<<<<<<< HEAD
-        
-        sizes = [self.encoder_dim // 8,
-                 self.encoder_dim // 4,
-                 self.encoder_dim // 2
-                 self.encoder_dim]
-        names = ['1st_conv',
-                 '2nd_conv',
-                 '3rd_conv',
-                 '4th_conv']
-        
+        sizes = [self.encoder_dim // 8, self.encoder_dim // 4,
+                 self.encoder_dim // 2, self.encoder_dim]
+        names = ['1st_conv', '2nd_conv', '3rd_conv', '4th_conv']
+
+        x = input_
         for size, name in zip(sizes,names):
-            var_x = conv(var_x, size, name=name)
-            
-=======
-        var_x = self.blocks.conv(var_x, 128)
-        var_x = self.blocks.conv(var_x, 266)
-        var_x = self.blocks.conv(var_x, 512)
-        var_x = self.blocks.conv(var_x, 1024)
->>>>>>> train_refactor
-        var_x = Flatten()(var_x)
-        return KerasModel(input_, var_x)
+            x = self.blocks.conv(x, size, name=name)
+
+        x = Flatten()(x)
+        return KerasModel(input_, x)
 
     def intermediate(self):
         """ Intermediate Network """
         latent_shape = self.input_shape[0] // 16
         input_ = Input(shape=(None, latent_shape * latent_shape * self.encoder_dim))
-        var_x = input_
-        var_x = Dense(self.encoder_dim, name = '1st_dense')(var_x)
-        var_x = Dense(latent_shape * latent_shape * self.encoder_dim //2, name = '2nd_dense')(var_x)
-        var_x = Reshape((latent_shape, latent_shape, self.encoder_dim //2))(var_x)
-        return KerasModel(input_, var_x)
+        x = input_
+        x = Dense(self.encoder_dim, name = '1st_dense')(x)
+        x = Dense(latent_shape * latent_shape * self.encoder_dim //2, name = '2nd_dense')(x)
+        x = Reshape((latent_shape, latent_shape, self.encoder_dim //2))(x)
+        return KerasModel(input_, x)
 
     def decoder(self):
         """ Decoder Network """
-<<<<<<< HEAD
         input_ = Input(shape=(self.input_shape[0] // 16, self.input_shape[0] // 16, self.encoder_dim))
-        
-        sizes = [self.encoder_dim // 2,
-                 self.encoder_dim // 4,
-                 self.encoder_dim // 8,
-                 self.encoder_dim // 16]
-        names = ['1st_upscale',
-                 '2nd_upscale',
-                 '3rd_upscale',
-                 '4th_upscale']
-                 
-        var_x = input_
+        sizes = [self.encoder_dim // 2, self.encoder_dim // 4,
+                 self.encoder_dim // 8, self.encoder_dim // 16]
+        names = ['1st_upscale', '2nd_upscale',
+                 '3rd_upscale', '4th_upscale']
+
+        x = input_
         for size, name in zip(sizes,names):
-            var_x = upscale(var_x, size , use_subpixel=self.config["subpixel_upscaling"], name = name)
-            
-        var_x = Conv2D(3, kernel_size=5, padding="same", activation="sigmoid", name = 'output_sigmoid')(var_x)
-=======
-        input_ = Input(shape=(4, 4, self.encoder_dim))
-        var_x = input_
-        var_x = self.blocks.upscale(var_x, 512)
-        var_x = self.blocks.upscale(var_x, 256)
-        var_x = self.blocks.upscale(var_x, 128)
-        var_x = self.blocks.upscale(var_x, 64)
-        var_x = Conv2D(3, kernel_size=5, padding="same", activation="sigmoid")(var_x)
->>>>>>> train_refactor
-        return KerasModel(input_, var_x)
+            x = self.blocks.upscale(x, size, name = name)
+
+        x = Conv2D(3, kernel_size=5, padding="same",
+                   activation="sigmoid", name = 'output_sigmoid')(x)
+        return KerasModel(input_, x)

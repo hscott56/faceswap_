@@ -42,63 +42,31 @@ class Model(OriginalModel):
             self.add_predictor(side, autoencoder)
         logger.debug("Initialized model")
 
-<<<<<<< HEAD
     def decoder(self, mask=False):
         """ DFaker Decoder Network """
-        use_subpixel = self.config["subpixel_upscaling"]
         input_ = Input(shape=(self.input_shape[0] // 8,
                               self.input_shape[0] // 8,
                               self.encoder_dim // 2))
-        
         sizes = [self.encoder_dim // 2, self.encoder_dim // 4,
                  self.encoder_dim // 8, self.encoder_dim // 16]
         names = ['2nd_upscale', '3rd_upscale',
                  '4th_upscale', '5th_upscale']
-        names = [name + '_mask' for name in names] if mask else names
-        channel_num = 1 if mask else 3
-        out_name = 'face_sigmoid' if mask else 'mask_sigmoid'
-        
-        var_x = input_
+        if mask:
+            names = [name + '_mask' for name in names]
+            channel_num = 1
+            out_name = 'mask_sigmoid'
+        else:
+            channel_num = 3
+            out_name = 'face_sigmoid'
+
+        x = input_
         # adds one more resblock iteration than standard dfaker
         for size, name in zip(sizes,names):
-            var_x = upscale(var_x, size ,
-                            use_subpixel=self.config["subpixel_upscaling"],
-                            name = name)
+            x = self.blocks.upscale(x, size, res_block_follows=True, name = name)
             if not mask:
-                var_x = res_block(var_x, size,
-                                  kernel_initializer=self.kernel_initializer)
-            
-        var_x = Conv2D(channel_num, kernel_size=5, padding='same',
-                       activation='sigmoid', name = out_name)(var_x)
+                x = self.blocks.res_block(x, size, kernel_initializer=self.kernel_initializer)
 
-        return KerasModel(input_, var_x)
-=======
-    def decoder(self):
-        """ Decoder Network """
-        input_ = Input(shape=(8, 8, 512))
-        inp_x = input_
-        inp_y = input_
+        x = Conv2D(channel_num, kernel_size=5, padding='same',
+                       activation='sigmoid', name = out_name)(x)
 
-        inp_x = self.blocks.upscale(inp_x, 512, res_block_follows=True)
-        inp_x = self.blocks.res_block(inp_x, 512, kernel_initializer=self.kernel_initializer)
-        inp_x = self.blocks.upscale(inp_x, 256, res_block_follows=True)
-        inp_x = self.blocks.res_block(inp_x, 256, kernel_initializer=self.kernel_initializer)
-        inp_x = self.blocks.upscale(inp_x, 128, res_block_follows=True)
-        inp_x = self.blocks.res_block(inp_x, 128, kernel_initializer=self.kernel_initializer)
-        inp_x = self.blocks.upscale(inp_x, 64)
-        inp_x = Conv2D(3,
-                       kernel_size=5,
-                       padding='same',
-                       activation='sigmoid')(inp_x)
-
-        inp_y = self.blocks.upscale(inp_y, 512)
-        inp_y = self.blocks.upscale(inp_y, 256)
-        inp_y = self.blocks.upscale(inp_y, 128)
-        inp_y = self.blocks.upscale(inp_y, 64)
-        inp_y = Conv2D(1,
-                       kernel_size=5,
-                       padding='same',
-                       activation='sigmoid')(inp_y)
-
-        return KerasModel([input_], outputs=[inp_x, inp_y])
->>>>>>> train_refactor
+        return KerasModel(input_, x)

@@ -19,72 +19,6 @@ from .initializers import ICNR_init
 from .layers import PixelShuffler, Scale, SubPixelUpscaling
 from .normalization import GroupNormalization, InstanceNormalization
 
-<<<<<<< HEAD
-
-# <<< Original Model Blocks >>> #
-
-def conv(inp, filters, kernel_size=5, strides=2, use_instance_norm=False, spatial_dropout=0.0, **kwargs):
-    """ Convolution Layer"""
-    var_x = Conv2D(filters,
-                   kernel_size=kernel_size,
-                   strides=strides,
-                   padding='same',
-                   **kwargs)(inp)
-    if use_instance_norm:
-        var_x = InstanceNormalization()(var_x)
-    var_x = LeakyReLU(0.1)(var_x)
-    if spatial_dropout != 0.0:
-        var_x = SpatialDropout2D(spatial_dropout)(var_x)
-    return var_x
-
-
-def upscale(inp, filters, kernel_size=3, use_instance_norm=False, use_subpixel=False, **kwargs):
-    """ Upscale Layer """
-    var_x = Conv2D(filters * 4, kernel_size=kernel_size, padding='same', **kwargs)(inp)
-    if use_instance_norm:
-        var_x = InstanceNormalization()(var_x)
-    var_x = LeakyReLU(0.1)(var_x)
-    if use_subpixel:
-        var_x = SubPixelUpscaling()(var_x)
-    else:
-        var_x = PixelShuffler()(var_x)
-    return var_x
-
-
-# <<< DFaker Model Blocks >>> #
-
-def res_block(inp, filters, kernel_size=3, **kwargs):
-    """ Residual block """
-    var_x = inp
-    var_x = Conv2D(filters,
-                   kernel_size=kernel_size,
-                   use_bias=False,
-                   padding="same",
-                   **kwargs)(var_x)
-    var_x = LeakyReLU(alpha=0.2)(var_x)
-    var_x = Conv2D(filters,
-                   kernel_size=kernel_size,
-                   use_bias=False,
-                   padding="same",
-                   **kwargs)(var_x)
-    var_x = Add()([var_x, inp])
-    var_x = LeakyReLU(alpha=0.2)(var_x)
-    return var_x
-
-
-# <<< OriginalHiRes Blocks >>> #
-
-def conv_sep(inp, filters, kernel_size=5, strides=2, **kwargs):
-    """ Seperable Convolution Layer """
-    var_x = SeparableConv2D(filters,
-                            kernel_size=kernel_size,
-                            strides=strides,
-                            padding='same',
-                            **kwargs)(inp)
-    var_x = Activation("relu")(var_x)
-    return var_x
-
-=======
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
@@ -175,7 +109,6 @@ class NNBlocks():
                                 **kwargs)(inp)
         var_x = Activation("relu")(var_x)
         return var_x
->>>>>>> train_refactor
 
 # <<< GAN V2.2 Blocks >>> #
 # TODO Merge these into NNBLock class when porting GAN2.2
