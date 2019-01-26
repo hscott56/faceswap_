@@ -11,6 +11,7 @@ from lib.align_eyes import align_eyes as func_align_eyes, FACIAL_LANDMARKS_IDXS
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
+
 class Extract():
     """ Based on the original https://www.reddit.com/r/deepfakes/
         code sample + contribs """
@@ -18,8 +19,9 @@ class Extract():
     def extract(self, image, face, size, align_eyes):
         """ Extract a face from an image """
         logger.trace("size: %s. align_eyes: %s", size, align_eyes)
+        padding = int(size * 0.1875)
         alignment = get_align_mat(face, size, align_eyes)
-        extracted = self.transform(image, alignment, size, 48)
+        extracted = self.transform(image, alignment, size, padding)
         logger.trace("Returning face and alignment matrix: (alignment_matrix: %s)", alignment)
         return extracted, alignment
 
@@ -36,8 +38,9 @@ class Extract():
         """ Transform Image """
         logger.trace("matrix: %s, size: %s. padding: %s", mat, size, padding)
         matrix = self.transform_matrix(mat, size, padding)
+        interpolators = self.get_matrix_scaling(matrix)
         return cv2.warpAffine(  # pylint: disable=no-member
-            image, matrix, (size, size))
+            image, matrix, (size, size), flags=interpolators[0])
 
     def transform_points(self, points, mat, size, padding=0):
         """ Transform points along matrix """
@@ -63,6 +66,19 @@ class Extract():
         matrix = cv2.invertAffineTransform(matrix)  # pylint: disable=no-member
         logger.trace("Returning: (points: %s, matrix: %s", points, matrix)
         return cv2.transform(points, matrix)  # pylint: disable=no-member
+
+    @staticmethod
+    def get_matrix_scaling(mat):
+        """ Get the correct interpolator """
+        x_scale = np.sqrt(mat[0, 0] * mat[0, 0] + mat[0, 1] * mat[0, 1])
+        y_scale = (mat[0, 0] * mat[1, 1] - mat[0, 1] * mat[1, 0]) / x_scale
+        avg_scale = (x_scale + y_scale) * 0.5
+        if avg_scale >= 1.0:
+            interpolators = cv2.INTER_CUBIC, cv2.INTER_AREA   # pylint: disable=no-member
+        else:
+            interpolators = cv2.INTER_AREA, cv2.INTER_CUBIC  # pylint: disable=no-member
+        logger.trace("interpolators: %s", interpolators)
+        return interpolators
 
     @staticmethod
     def get_feature_mask(aligned_landmarks_68, size,
@@ -123,7 +139,7 @@ class Extract():
 def get_align_mat(face, size, should_align_eyes):
     """ Return the alignment Matrix """
     logger.trace("size: %s, should_align_eyes: %s", size, should_align_eyes)
-    mat_umeyama = umeyama(np.array(face.landmarks_as_xy[17:]),True)[0:2]
+    mat_umeyama = umeyama(np.array(face.landmarks_as_xy[17:]), True)[0:2]
 
     if should_align_eyes is False:
         return mat_umeyama

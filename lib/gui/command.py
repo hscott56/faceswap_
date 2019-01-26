@@ -230,6 +230,7 @@ class OptionControl():
             ctlhelp = ctlhelp[2:].replace("\n\t", " ").replace("\n'", "\n\n'")
         else:
             ctlhelp = " ".join(ctlhelp.split())
+        ctlhelp = ctlhelp.replace("%%", "%")
         ctlhelp = ". ".join(i.capitalize() for i in ctlhelp.split(". "))
         ctlhelp = ctltitle + " - " + ctlhelp
         logger.debug("Formatted control help: (title: '%s', help: '%s'", ctltitle, ctlhelp)
@@ -333,7 +334,7 @@ class OptionControl():
         if control == ttk.Combobox:
             logger.debug("Adding combo choices: %s", choices)
             ctl["values"] = [choice for choice in choices]
-        Tooltip(ctl, text=helptext, wraplength=720)
+        Tooltip(ctl, text=helptext, wraplength=920)
         logger.debug("Added control to Options Frame: %s", control)
 
     def add_browser_buttons(self, frame, sysbrowser, filepath):

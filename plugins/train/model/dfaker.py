@@ -4,10 +4,8 @@
 
 
 from keras.initializers import RandomNormal
-from keras.layers import Input
+from keras.layers import Conv2D, Input
 from keras.models import Model as KerasModel
-
-from lib.model.nn_blocks import Conv2D, res_block, upscale
 
 from .original import logger, Model as OriginalModel
 
@@ -44,6 +42,7 @@ class Model(OriginalModel):
             self.add_predictor(side, autoencoder)
         logger.debug("Initialized model")
 
+<<<<<<< HEAD
     def decoder(self, mask=False):
         """ DFaker Decoder Network """
         use_subpixel = self.config["subpixel_upscaling"]
@@ -73,3 +72,33 @@ class Model(OriginalModel):
                        activation='sigmoid', name = out_name)(var_x)
 
         return KerasModel(input_, var_x)
+=======
+    def decoder(self):
+        """ Decoder Network """
+        input_ = Input(shape=(8, 8, 512))
+        inp_x = input_
+        inp_y = input_
+
+        inp_x = self.blocks.upscale(inp_x, 512, res_block_follows=True)
+        inp_x = self.blocks.res_block(inp_x, 512, kernel_initializer=self.kernel_initializer)
+        inp_x = self.blocks.upscale(inp_x, 256, res_block_follows=True)
+        inp_x = self.blocks.res_block(inp_x, 256, kernel_initializer=self.kernel_initializer)
+        inp_x = self.blocks.upscale(inp_x, 128, res_block_follows=True)
+        inp_x = self.blocks.res_block(inp_x, 128, kernel_initializer=self.kernel_initializer)
+        inp_x = self.blocks.upscale(inp_x, 64)
+        inp_x = Conv2D(3,
+                       kernel_size=5,
+                       padding='same',
+                       activation='sigmoid')(inp_x)
+
+        inp_y = self.blocks.upscale(inp_y, 512)
+        inp_y = self.blocks.upscale(inp_y, 256)
+        inp_y = self.blocks.upscale(inp_y, 128)
+        inp_y = self.blocks.upscale(inp_y, 64)
+        inp_y = Conv2D(1,
+                       kernel_size=5,
+                       padding='same',
+                       activation='sigmoid')(inp_y)
+
+        return KerasModel([input_], outputs=[inp_x, inp_y])
+>>>>>>> train_refactor

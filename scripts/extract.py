@@ -75,6 +75,9 @@ class Extract():
             if load_queue.shutdown.is_set():
                 logger.debug("Load Queue: Stop signal received. Terminating")
                 break
+            if image is None or not image.any():
+                logger.warning("Unable to open image. Skipping: '%s'", filename)
+                continue
             imagename = os.path.basename(filename)
             if imagename in self.alignments.data.keys():
                 logger.trace("Skipping image: '%s'", filename)
@@ -208,7 +211,7 @@ class Extract():
 
         self.threaded_io("reload", detected_faces)
 
-    def align_face(self, faces, align_eyes, size, filename, padding=48):
+    def align_face(self, faces, align_eyes, size, filename):
         """ Align the detected face and add the destination file path """
         final_faces = list()
         image = faces["image"]
@@ -219,10 +222,7 @@ class Extract():
             detected_face.from_dlib_rect(face, image)
             detected_face.landmarksXY = landmarks[idx]
             detected_face.frame_dims = image.shape[:2]
-            detected_face.load_aligned(image,
-                                       size=size,
-                                       padding=padding,
-                                       align_eyes=align_eyes)
+            detected_face.load_aligned(image, size=size, align_eyes=align_eyes)
             final_faces.append({"file_location": self.output_dir / Path(filename).stem,
                                 "face": detected_face})
         faces["detected_faces"] = final_faces

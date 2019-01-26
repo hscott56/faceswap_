@@ -113,9 +113,8 @@ class Convert():
         conv = self.args.converter
         converter = PluginLoader.get_converter(conv)(
             model.converter(self.args.swap_model),
-            arguments=self.args,
-            input_size=model.input_shape[0])
-
+            model=model,
+            arguments=self.args)
         return converter
 
     def prepare_images(self):

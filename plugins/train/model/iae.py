@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """ Improved autoencoder for faceswap """
 
-from keras.layers import Concatenate, Dense, Flatten, Input, Reshape
-from keras.layers.convolutional import Conv2D
+from keras.layers import Concatenate, Conv2D, Dense, Flatten, Input, Reshape
 from keras.models import Model as KerasModel
 
-from lib.model.nn_blocks import conv, upscale
 from ._base import ModelBase, logger
 
 
@@ -24,8 +22,8 @@ class Model(ModelBase):
         logger.debug("Adding networks")
         self.add_network("encoder", None, self.encoder())
         self.add_network("decoder", None, self.decoder())
-        self.add_network("inter", "a", self.intermediate())
-        self.add_network("inter", "b", self.intermediate())
+        self.add_network("intermediate", "a", self.intermediate())
+        self.add_network("intermediate", "b", self.intermediate())
         self.add_network("inter", None, self.intermediate())
         logger.debug("Added networks")
 
@@ -38,7 +36,7 @@ class Model(ModelBase):
         encoder = self.networks["encoder"].network
         inter_both = self.networks["inter"].network
         for side in ("a", "b"):
-            inter_side = self.networks["inter_{}".format(side)].network
+            inter_side = self.networks["intermediate_{}".format(side)].network
             output = decoder(Concatenate()([inter_side(encoder(inp)),
                                             inter_both(encoder(inp))]))
 
@@ -50,6 +48,7 @@ class Model(ModelBase):
         """ Encoder Network """
         input_ = Input(shape=self.input_shape)
         var_x = input_
+<<<<<<< HEAD
         
         sizes = [self.encoder_dim // 8,
                  self.encoder_dim // 4,
@@ -63,6 +62,12 @@ class Model(ModelBase):
         for size, name in zip(sizes,names):
             var_x = conv(var_x, size, name=name)
             
+=======
+        var_x = self.blocks.conv(var_x, 128)
+        var_x = self.blocks.conv(var_x, 266)
+        var_x = self.blocks.conv(var_x, 512)
+        var_x = self.blocks.conv(var_x, 1024)
+>>>>>>> train_refactor
         var_x = Flatten()(var_x)
         return KerasModel(input_, var_x)
 
@@ -78,6 +83,7 @@ class Model(ModelBase):
 
     def decoder(self):
         """ Decoder Network """
+<<<<<<< HEAD
         input_ = Input(shape=(self.input_shape[0] // 16, self.input_shape[0] // 16, self.encoder_dim))
         
         sizes = [self.encoder_dim // 2,
@@ -94,4 +100,13 @@ class Model(ModelBase):
             var_x = upscale(var_x, size , use_subpixel=self.config["subpixel_upscaling"], name = name)
             
         var_x = Conv2D(3, kernel_size=5, padding="same", activation="sigmoid", name = 'output_sigmoid')(var_x)
+=======
+        input_ = Input(shape=(4, 4, self.encoder_dim))
+        var_x = input_
+        var_x = self.blocks.upscale(var_x, 512)
+        var_x = self.blocks.upscale(var_x, 256)
+        var_x = self.blocks.upscale(var_x, 128)
+        var_x = self.blocks.upscale(var_x, 64)
+        var_x = Conv2D(3, kernel_size=5, padding="same", activation="sigmoid")(var_x)
+>>>>>>> train_refactor
         return KerasModel(input_, var_x)

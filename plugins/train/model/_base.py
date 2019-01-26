@@ -16,6 +16,7 @@ from keras.utils import get_custom_objects, multi_gpu_model
 
 from lib import Serializer
 from lib.model.losses import DSSIMObjective, PenalizedLoss
+from lib.model.nn_blocks import NNBlocks
 from plugins.train._config import Config
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -24,22 +25,25 @@ _CONFIG = None
 
 class ModelBase():
     """ Base class that all models should inherit from """
-    def __init__(self, model_dir, gpus,
+    def __init__(self, model_dir, gpus, training_image_size=256,
                  input_shape=None, encoder_dim=None, trainer="original", predict=False):
-        logger.debug("Initializing ModelBase (%s): (model_dir: '%s', gpus: %s, input_shape: %s, "
-                     "encoder_dim: %s)", self.__class__.__name__, model_dir, gpus,
-                     input_shape, encoder_dim)
+        logger.debug("Initializing ModelBase (%s): (model_dir: '%s', gpus: %s, "
+                     "training_image_size, %s, input_shape: %s, encoder_dim: %s)",
+                     self.__class__.__name__, model_dir, gpus, training_image_size, input_shape,
+                     encoder_dim)
         self.predict = predict
         self.model_dir = model_dir
         self.gpus = gpus
+        self.blocks = NNBlocks(use_subpixel=self.config["subpixel_upscaling"],
+                               use_icnr_init=self.config["use_icnr_init"])
         self.input_shape = input_shape
         self.output_shape = None  # set after model is compiled
         self.encoder_dim = encoder_dim
         self.trainer = trainer
         self.name = self.set_model_name()
 
-        self.state = State(self.model_dir, self.name)
-        self.load_input_shape()
+        self.state = State(self.model_dir, self.name, training_image_size)
+        self.load_state_info()
 
         self.networks = dict()  # Networks for the model
         self.predictors = dict()  # Predictors for model
@@ -49,9 +53,9 @@ class ModelBase():
         # Training information specific to the model should be placed in this
         # dict for reference by the trainer.
         self.training_opts = dict()
-        self.set_training_data()
 
         self.build()
+        self.set_training_data()
         logger.debug("Initialized ModelBase (%s)", self.__class__.__name__)
 
     @property
@@ -71,11 +75,11 @@ class ModelBase():
             otherwise be sure to add a ratio """
         logger.debug("Setting training data")
         self.training_opts["coverage_ratio"] = 0.625
-        if self.input_shape[0] < 128:
+        if self.output_shape[0] < 128:
             self.training_opts["preview_images"] = 14
-        elif self.input_shape[0] < 192:
+        elif self.output_shape[0] < 192:
             self.training_opts["preview_images"] = 10
-        elif self.input_shape[0] < 256:
+        elif self.output_shape[0] < 256:
             self.training_opts["preview_images"] = 8
         else:
             self.training_opts["preview_images"] = 6
@@ -111,7 +115,7 @@ class ModelBase():
         logger.debug("model name: '%s'", retval)
         return retval
 
-    def load_input_shape(self):
+    def load_state_info(self):
         """ Load the input shape from state file if it exists """
         logger.debug("Loading Input Shape from State file")
         if not self.state.inputs:
@@ -172,7 +176,7 @@ class ModelBase():
     def compile_predictors(self):
         """ Compile the predictors """
         logger.debug("Compiling Predictors")
-        optimizer = Adam(lr=5e-5, beta_1=0.5, beta_2=0.999)
+        optimizer = Adam(lr=5e-5, beta_1=0.5, beta_2=0.999, clipnorm=1.0)
 
         for side, model in self.predictors.items():
             loss_funcs = [self.loss_function(side)]
@@ -422,10 +426,11 @@ class NNMeta():
 
 class State():
     """ Class to hold the model's current state and autoencoder structure """
-    def __init__(self, model_dir, model_name):
+    def __init__(self, model_dir, model_name, training_image_size):
         self.serializer = Serializer.get_serializer("json")
         filename = "{}_state.{}".format(model_name, self.serializer.ext)
         self.filename = str(model_dir / filename)
+        self.training_size = training_image_size
         self.iterations = 0
         self.inputs = dict()
         self.config = dict()
@@ -450,6 +455,7 @@ class State():
                 self.iterations = state.get("iterations", 0)
                 self.inputs = state.get("inputs", dict())
                 self.config = state.get("config", dict())
+                self.state = state.get("training_size", 256)
                 logger.debug("Loaded state: %s", {key: val for key, val in state.items()
                                                   if key != "models"})
         except IOError as err:
@@ -467,6 +473,7 @@ class State():
             with open(self.filename, "wb") as out:
                 state = {"iterations": self.iterations,
                          "inputs": self.inputs,
+                         "training_size": self.training_size,
                          "config": _CONFIG}
                 state_json = self.serializer.marshal(state)
                 out.write(state_json.encode("utf-8"))

@@ -7,7 +7,7 @@ from keras.initializers import RandomNormal
 from keras.layers import add, Conv2D, Dense, Flatten, Input, Reshape
 from keras.models import Model as KerasModel
 
-from lib.model.nn_blocks import conv, conv_sep, PixelShuffler, res_block, upscale
+from lib.model.layers import PixelShuffler
 from .original import logger, Model as OriginalModel
 
 
@@ -33,10 +33,11 @@ class Model(OriginalModel):
             in_conv_filters = 128 + (self.input_shape[0] - 128) // 4
         latent_shape = self.input_shape[0] // 16
 
-        var_x = conv(input_, in_conv_filters, **kwargs)
+        var_x = self.blocks.conv(input_, in_conv_filters, res_block_follows=True, **kwargs)
         tmp_x = var_x
         res_cycles = 8 if self.config.get("lowmem", False) else 16
         for _ in range(res_cycles):
+<<<<<<< HEAD:plugins/train/model/original_villain.py
             var_x = res_block(var_x, self.encoder_dim // 8, **kwargs)
             
         var_x = add([var_x, tmp_x])
@@ -55,6 +56,25 @@ class Model(OriginalModel):
         var_x = Dense(latent_shape * latent_shape * self.encoder_dim, **kwargs)(var_x)
         var_x = Reshape((latent_shape, latent_shape, self.encoder_dim))(var_x)
         var_x = upscale(var_x, self.encoder_dim // 2, **kwargs)
+=======
+            nn_x = self.blocks.res_block(var_x, 128, **kwargs)
+            var_x = nn_x
+        var_x = add([var_x, tmp_x]) # consider adding scale before this layer to scale the residual chain
+        var_x = self.blocks.conv(var_x, 128, **kwargs)
+        var_x = PixelShuffler()(var_x)
+        var_x = self.blocks.conv(var_x, 128, **kwargs)
+        var_x = PixelShuffler()(var_x)
+        var_x = self.blocks.conv(var_x, 128, **kwargs)
+        var_x = self.blocks.conv_sep(var_x, 256, **kwargs)
+        var_x = self.blocks.conv(var_x, 512, **kwargs)
+        if not self.config.get("lowmem", False):
+            var_x = self.blocks.conv_sep(var_x, 1024, **kwargs)
+
+        var_x = Dense(self.encoder_dim, **kwargs)(Flatten()(var_x))
+        var_x = Dense(dense_shape * dense_shape * 1024, **kwargs)(var_x)
+        var_x = Reshape((dense_shape, dense_shape, 1024))(var_x)
+        var_x = self.blocks.upscale(var_x, 512, **kwargs)
+>>>>>>> train_refactor:plugins/train/model/villain.py
         return KerasModel(input_, var_x)
 
     def decoder(self):
@@ -64,11 +84,20 @@ class Model(OriginalModel):
         input_ = Input(shape=(latent_shape*2, latent_shape*2, self.encoder_dim // 2))
 
         var_x = input_
+<<<<<<< HEAD:plugins/train/model/original_villain.py
         var_x = upscale(var_x, self.encoder_dim // 2, **kwargs)
         var_x = res_block(var_x, self.encoder_dim // 2, **kwargs)
         var_x = upscale(var_x, self.encoder_dim // 4, **kwargs)
         var_x = res_block(var_x, self.encoder_dim // 4, **kwargs)
         var_x = upscale(var_x, self.encoder_dim // 8, **kwargs)
         var_x = res_block(var_x, self.encoder_dim // 8, **kwargs)
+=======
+        var_x = self.blocks.upscale(var_x, 512, res_block_follows=True, **kwargs)
+        var_x = self.blocks.res_block(var_x, 512, **kwargs)
+        var_x = self.blocks.upscale(var_x, 256, res_block_follows=True, **kwargs)
+        var_x = self.blocks.res_block(var_x, 256, **kwargs)
+        var_x = self.blocks.upscale(var_x, self.input_shape[0], res_block_follows=True, **kwargs)
+        var_x = self.blocks.res_block(var_x, self.input_shape[0], **kwargs)
+>>>>>>> train_refactor:plugins/train/model/villain.py
         var_x = Conv2D(3, kernel_size=5, padding='same', activation='sigmoid')(var_x)
         return KerasModel(input_, var_x)

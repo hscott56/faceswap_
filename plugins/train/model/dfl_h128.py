@@ -3,11 +3,9 @@
     Based on https://github.com/iperov/DeepFaceLab
 """
 
-from keras.layers import Dense, Flatten, Input, Reshape
-from keras.layers.convolutional import Conv2D
+from keras.layers import Conv2D, Dense, Flatten, Input, Reshape
 from keras.models import Model as KerasModel
 
-from lib.model.nn_blocks import conv, upscale
 from .original import logger, Model as OriginalModel
 
 
@@ -45,6 +43,7 @@ class Model(OriginalModel):
         """ DFL H128 Encoder --- this is procedureally identical to the
             stadard encoder"""
         input_ = Input(shape=self.input_shape)
+<<<<<<< HEAD
         use_subpixel = self.config["subpixel_upscaling"]
         latent_shape = self.input_shape[0] // 16
 
@@ -62,10 +61,22 @@ class Model(OriginalModel):
         var_x = Reshape((latent_shape, latent_shape, self.encoder_dim))(var_x)
         
         var_x = upscale(var_x, self.encoder_dim, use_subpixel=use_subpixel, name = '1st_upscale')
+=======
+        var_x = input_
+        var_x = self.blocks.conv(var_x, 128)
+        var_x = self.blocks.conv(var_x, 256)
+        var_x = self.blocks.conv(var_x, 512)
+        var_x = self.blocks.conv(var_x, 1024)
+        var_x = Dense(self.encoder_dim)(Flatten()(var_x))
+        var_x = Dense(8 * 8 * self.encoder_dim)(var_x)
+        var_x = Reshape((8, 8, self.encoder_dim))(var_x)
+        var_x = self.blocks.upscale(var_x, self.encoder_dim)
+>>>>>>> train_refactor
         return KerasModel(input_, var_x)
 
     def decoder(self):
         """ DFL H128 Decoder """
+<<<<<<< HEAD
         use_subpixel = self.config["subpixel_upscaling"]
         latent_shape = self.input_shape[0] // 16
         input_ = Input(shape=(latent_shape, latent_shape, self.encoder_dim))
@@ -79,6 +90,13 @@ class Model(OriginalModel):
         var_x = input_
         for size, name in zip(sizes,names):
             var_x = upscale(var_x, size , use_subpixel=self.config["subpixel_upscaling"], name = name)
+=======
+        input_ = Input(shape=(16, 16, self.encoder_dim))
+        var = input_
+        var = self.blocks.upscale(var, self.encoder_dim)
+        var = self.blocks.upscale(var, self.encoder_dim // 2)
+        var = self.blocks.upscale(var, self.encoder_dim // 4)
+>>>>>>> train_refactor
 
         var_x = Conv2D(channel_num, kernel_size=5,
                           padding='same',
